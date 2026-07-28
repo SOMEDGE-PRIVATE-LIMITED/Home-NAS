@@ -117,10 +117,18 @@ interface ServerConfig {
   mediaDirectories: string[];    // Absolute paths to media root directories
   pin: string;                   // Authentication PIN; empty string = no auth
   logLevel: 'DEBUG' | 'INFO' | 'WARN' | 'ERROR';
+  watchMode: 'fsevents' | 'interval' | 'manual'; // Library refresh strategy, default "fsevents"
+  scanIntervalSeconds: number;   // Only used when watchMode="interval", default 300
+  ffprobeConcurrency: number;    // Max parallel ffprobe calls during scan, default 4
 }
 ```
 
 On malformed or missing config, the process logs a descriptive error and exits with code 1.
+
+**`watchMode` guidance for hardware:**
+- `"fsevents"` (default) — uses native macOS FSEvents via chokidar; zero polling overhead. Best for SSDs or fast HDDs.
+- `"interval"` — chokidar is not started; instead `MediaLibrary` runs a full re-scan on a timer. Directories are scanned sequentially (staggered) to avoid simultaneous I/O bursts. Recommended for slow 1 TB mechanical drives where FSEvents overhead is acceptable but continuous chokidar traversal on large trees is not.
+- `"manual"` — no automatic refresh at all. The library is populated on startup and updated only via `POST /library/refresh`. Best for very large libraries or NAS scenarios where the administrator prefers full control over disk activity.
 
 ### 2.2 SSDPServer
 
@@ -162,6 +170,7 @@ Routes:
 | GET | `/cm/scpd.xml` | ConnectionManager service description |
 | GET/HEAD | `/stream/:itemId` | Media file streaming |
 | POST | `/pin` | PIN authentication endpoint |
+| POST | `/library/refresh` | Trigger immediate full library re-scan |
 
 ### 2.4 AuthMiddleware
 
@@ -235,12 +244,18 @@ Coordinates the MediaScanner and FilesystemWatcher and owns the MediaIndex.
 
 ```typescript
 class MediaLibrary {
-  constructor(dirs: string[], index: MediaIndex);
+  constructor(dirs: string[], index: MediaIndex, config: ServerConfig);
   async initialScan(): Promise<void>;
-  startWatching(): void;
+  startWatching(): void;   // behaviour depends on watchMode
   stopWatching(): void;
+  async refresh(): Promise<void>;  // triggered by POST /library/refresh
 }
 ```
+
+**`startWatching()` behaviour by `watchMode`:**
+- `"fsevents"`: starts `FilesystemWatcher` on all configured directories.
+- `"interval"`: starts a `setInterval` that calls `scanner.scanDirectory(dir)` for each directory **sequentially** (staggered), waiting for each to complete before starting the next. Interval period is `config.scanIntervalSeconds * 1000` ms.
+- `"manual"`: no-op — the library only updates via `initialScan()` or `refresh()`.
 
 ### 2.9 MediaScanner
 
@@ -263,7 +278,7 @@ Recursively walks configured directories, identifies media files by extension, a
 .png  → image/png
 ```
 
-For non-image files, `ffprobe` is invoked to extract duration, video resolution, audio bitrate, and sample rate. `ffprobe` calls are rate-limited to a concurrency of 4 to avoid hammering the Mac mini during initial scan of large libraries.
+For non-image files, `ffprobe` is invoked to extract duration, video resolution, audio bitrate, and sample rate. `ffprobe` calls are rate-limited to a concurrency equal to `config.ffprobeConcurrency` (default: 4) to avoid saturating disk I/O during the initial scan of large libraries on slow drives. The concurrency limit applies globally across all directories being scanned in parallel.
 
 ```typescript
 class MediaScanner {
@@ -274,12 +289,16 @@ class MediaScanner {
 
 ### 2.10 FilesystemWatcher
 
-Wraps `chokidar` configured with `usePolling: false` (FSEvents) and `awaitWriteFinish: { stabilityThreshold: 2000 }` (waits for writes to complete before indexing a file).
+Wraps `chokidar` configured with `usePolling: false` (FSEvents) and `awaitWriteFinish: { stabilityThreshold: 2000 }` (waits for writes to complete before indexing a file). Only instantiated when `config.watchMode === "fsevents"`.
 
 Events mapped to MediaLibrary actions:
 - `add` → `MediaIndex.upsert(filePath)`
 - `change` → `MediaIndex.upsert(filePath)` (re-probe metadata)
 - `unlink` → `MediaIndex.remove(filePath)`
+
+When `watchMode` is `"interval"`, `FilesystemWatcher` is not used. Instead, `MediaLibrary` runs a `setInterval` timer that calls `scanner.scanDirectory(dir)` for each configured directory **sequentially** (one at a time) to stagger disk I/O. The interval is `config.scanIntervalSeconds * 1000` ms.
+
+When `watchMode` is `"manual"`, neither `FilesystemWatcher` nor the interval timer is started. The index is only populated at startup via `initialScan()` and on explicit `POST /library/refresh` requests.
 
 ### 2.11 MediaIndex
 
@@ -416,6 +435,25 @@ interface FileMetadata {
       "type": "string",
       "enum": ["DEBUG", "INFO", "WARN", "ERROR"],
       "default": "INFO"
+    },
+    "watchMode": {
+      "type": "string",
+      "enum": ["fsevents", "interval", "manual"],
+      "default": "fsevents",
+      "description": "fsevents=native FSEvents (SSDs), interval=polling on a timer (slow HDDs), manual=no auto-refresh"
+    },
+    "scanIntervalSeconds": {
+      "type": "integer",
+      "minimum": 60,
+      "default": 300,
+      "description": "Used only when watchMode=interval. Seconds between full re-scans."
+    },
+    "ffprobeConcurrency": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 16,
+      "default": 4,
+      "description": "Max parallel ffprobe calls during a scan. Lower values reduce disk I/O on slow drives."
     }
   }
 }
@@ -445,9 +483,17 @@ The configuration file lives at `~/.config/dlna-media-server/config.json`. Examp
     "/Volumes/Media/Photos"
   ],
   "pin": "4821",
-  "logLevel": "INFO"
+  "logLevel": "INFO",
+  "watchMode": "interval",
+  "scanIntervalSeconds": 300,
+  "ffprobeConcurrency": 2
 }
 ```
+
+The `watchMode` choice should match the underlying storage:
+- SSD or fast HDD → `"fsevents"` (default, no change needed)
+- Slow 1 TB mechanical HDD → `"interval"` with `scanIntervalSeconds: 300` (re-scan every 5 minutes)
+- Very large library or administrator-managed NAS → `"manual"` (refresh via `POST /library/refresh` or server restart)
 
 The `DLNA_CONFIG` environment variable overrides the default path, enabling the launchd plist to specify an alternate location for the daemon user's config.
 
@@ -784,6 +830,19 @@ This property holds identically for both `Browse` and `Search` actions.
 *For any* set of IP address strings (valid or arbitrary strings that were registered), serialising the `DeviceRegistry` to its JSON format (`devices.json`) and then deserialising it must produce a registry whose `registeredIps` set is identical to the original — no IPs added, removed, or mutated.
 
 **Validates: Requirements 10.5**
+
+---
+
+### Property 18: watchMode Controls Whether Automatic Re-Scan Occurs
+
+*For any* configured `watchMode` value:
+- When `watchMode = "fsevents"`, the `FilesystemWatcher` must be started after `startWatching()` and must be stopped after `stopWatching()`.
+- When `watchMode = "interval"`, no `FilesystemWatcher` is started; instead an interval timer is active whose period equals `config.scanIntervalSeconds * 1000` ms.
+- When `watchMode = "manual"`, neither a `FilesystemWatcher` nor an interval timer is started after `startWatching()` is called.
+
+In all three modes, `POST /library/refresh` must trigger exactly one full re-scan of all configured directories.
+
+**Validates: Requirements 6.6, 6.7, 6.8**
 
 ---
 

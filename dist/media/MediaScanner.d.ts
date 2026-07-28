@@ -16,7 +16,9 @@ export declare class MediaScanner {
     private readonly semaphore;
     /** Set to true after the first ffprobe failure caused by missing ffprobe binary. */
     private ffprobeUnavailable;
-    constructor(index: MediaIndex, logger: Logger, baseUrl: string);
+    constructor(index: MediaIndex, logger: Logger, baseUrl: string, 
+    /** Max parallel ffprobe calls. Defaults to 4. Lower values reduce disk I/O on slow drives. */
+    ffprobeConcurrency?: number);
     /**
      * Indexes a single file: checks that its extension is supported, then probes
      * and upserts it into the MediaIndex.

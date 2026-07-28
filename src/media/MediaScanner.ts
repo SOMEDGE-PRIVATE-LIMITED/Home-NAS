@@ -40,10 +40,8 @@ const DLNA_PROFILE_MAP: Record<string, string> = {
 export const SUPPORTED_EXTENSIONS = new Set(Object.keys(MIME_TYPE_MAP));
 
 // ──────────────────────────────────────────────────────────────────────────────
-// Semaphore — limits concurrent ffprobe calls to MAX_CONCURRENT_PROBES
+// Semaphore — limits concurrent ffprobe calls to a configurable ceiling
 // ──────────────────────────────────────────────────────────────────────────────
-
-const MAX_CONCURRENT_PROBES = 4;
 
 /**
  * Minimal semaphore: tracks the number of active probes and queues callbacks
@@ -90,7 +88,7 @@ class Semaphore {
  * Requirements: 6.1, 6.5, 2.7, 2.8
  */
 export class MediaScanner {
-  private readonly semaphore = new Semaphore(MAX_CONCURRENT_PROBES);
+  private readonly semaphore: Semaphore;
   /** Set to true after the first ffprobe failure caused by missing ffprobe binary. */
   private ffprobeUnavailable = false;
 
@@ -98,7 +96,11 @@ export class MediaScanner {
     private readonly index: MediaIndex,
     private readonly logger: Logger,
     private readonly baseUrl: string,
-  ) {}
+    /** Max parallel ffprobe calls. Defaults to 4. Lower values reduce disk I/O on slow drives. */
+    ffprobeConcurrency = 4,
+  ) {
+    this.semaphore = new Semaphore(ffprobeConcurrency);
+  }
 
   // ── Public API ──────────────────────────────────────────────────────────────
 

@@ -58,6 +58,7 @@ const DeviceDescription_js_1 = require("./http/DeviceDescription.js");
 const MediaStreamer_js_1 = require("./http/MediaStreamer.js");
 const ContentDirectoryService_js_1 = require("./services/ContentDirectoryService.js");
 const ConnectionManagerService_js_1 = require("./services/ConnectionManagerService.js");
+const LibraryRefreshHandler_js_1 = require("./http/LibraryRefreshHandler.js");
 const SSDPServer_js_1 = require("./ssdp/SSDPServer.js");
 // ──────────────────────────────────────────────────────────────────────────────
 // Bootstrap
@@ -79,9 +80,9 @@ async function main() {
     const host = getLocalIp();
     const baseUrl = `http://${host}:${config.port}`;
     // 6. Build media layer
-    const scanner = new MediaScanner_js_1.MediaScanner(mediaIndex, logger, baseUrl);
+    const scanner = new MediaScanner_js_1.MediaScanner(mediaIndex, logger, baseUrl, config.ffprobeConcurrency);
     const watcher = new FilesystemWatcher_js_1.FilesystemWatcher(scanner, mediaIndex, logger);
-    const library = new MediaLibrary_js_1.MediaLibrary(config.mediaDirectories, scanner, watcher, mediaIndex, logger);
+    const library = new MediaLibrary_js_1.MediaLibrary(config.mediaDirectories, scanner, watcher, mediaIndex, logger, config);
     // 7. Build Fastify HTTP server
     const fastify = (0, server_js_1.createHttpServer)();
     // 8. Register middleware and routes (order matters: logger → auth → routes)
@@ -92,6 +93,7 @@ async function main() {
     (0, MediaStreamer_js_1.registerMediaStreamer)(fastify, mediaIndex, logger);
     (0, ContentDirectoryService_js_1.registerContentDirectoryService)(fastify, mediaIndex, logger, baseUrl);
     (0, ConnectionManagerService_js_1.registerConnectionManagerService)(fastify, logger);
+    (0, LibraryRefreshHandler_js_1.registerLibraryRefreshHandler)(fastify, library, mediaIndex, logger);
     // 9. Track active stream count for graceful drain
     let activeStreams = 0;
     fastify.addHook('onRequest', (_req, _reply, done) => {

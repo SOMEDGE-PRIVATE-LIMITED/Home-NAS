@@ -17,12 +17,12 @@ Implement a DLNA/UPnP AV media server in Node.js 20 LTS with TypeScript 5.x that
 
 - [x] 2. ConfigLoader
   - [x] 2.1 Implement `ConfigLoader` in `src/config/ConfigLoader.ts`
-    - Define `ServerConfig` interface with all fields: `friendlyName`, `port`, `mediaDirectories`, `pin`, `logLevel`
+    - Define `ServerConfig` interface with all fields: `friendlyName`, `port`, `mediaDirectories`, `pin`, `logLevel`, `watchMode`, `scanIntervalSeconds`, `ffprobeConcurrency`
     - Read config from `~/.config/dlna-media-server/config.json` (overridable via `DLNA_CONFIG` env var)
-    - Parse and validate JSON against the schema: `mediaDirectories` required, numeric ranges for `port`, enum check for `logLevel`
-    - Apply defaults: `friendlyName = "DLNA Media Server"`, `port = 8200`, `pin = ""`, `logLevel = "INFO"`
+    - Parse and validate JSON against the schema: `mediaDirectories` required, numeric ranges for `port`, enum check for `logLevel`, enum check for `watchMode` (`"fsevents"` | `"interval"` | `"manual"`), integer range for `scanIntervalSeconds` (min: 60), integer range for `ffprobeConcurrency` (min: 1, max: 16)
+    - Apply defaults: `friendlyName = "DLNA Media Server"`, `port = 8200`, `pin = ""`, `logLevel = "INFO"`, `watchMode = "fsevents"`, `scanIntervalSeconds = 300`, `ffprobeConcurrency = 4`
     - Log descriptive error and `process.exit(1)` on missing file, malformed JSON, or schema validation failure
-    - _Requirements: 5.1, 5.3, 5.4, 5.5, 10.6_
+    - _Requirements: 5.1, 5.3, 5.4, 5.5, 6.6, 6.7, 6.9, 10.6_
 
   - [ ]* 2.2 Write unit tests for ConfigLoader
     - Test valid config parsing with all fields present
@@ -88,20 +88,24 @@ Implement a DLNA/UPnP AV media server in Node.js 20 LTS with TypeScript 5.x that
     - Test graceful handling when `ffprobe` returns null/errors
     - _Requirements: 6.5, 2.7, 2.8_
 
-- [x] 6. FilesystemWatcher
-  - [x] 6.1 Implement `FilesystemWatcher` in `src/media/FilesystemWatcher.ts`
-    - Wrap `chokidar@3.6.0` with `usePolling: false` and `awaitWriteFinish: { stabilityThreshold: 2000 }`
-    - Emit `add` → call `index.upsert`, `change` → call `index.upsert` (re-probe), `unlink` → call `index.remove`
-    - Expose `start(dirs: string[])` and `stop()` methods
-    - _Requirements: 6.2, 6.3, 6.4_
+- [ ] 6. FilesystemWatcher
+  - [ ] 6.1 Update `FilesystemWatcher` in `src/media/FilesystemWatcher.ts` to be conditionally activated
+    - Wrap `chokidar@3.6.0` with `usePolling: false` and `awaitWriteFinish: { stabilityThreshold: 2000 }` — unchanged
+    - Emit `add` → call `index.upsert`, `change` → call `index.upsert` (re-probe), `unlink` → call `index.remove` — unchanged
+    - Expose `start(dirs: string[])` and `stop()` methods — unchanged
+    - No changes to `FilesystemWatcher` itself; activation is controlled by `MediaLibrary` based on `watchMode`
+    - _Requirements: 6.2, 6.3, 6.4, 6.6_
 
-- [x] 7. MediaLibrary
-  - [x] 7.1 Implement `MediaLibrary` in `src/media/MediaLibrary.ts`
-    - Compose `MediaScanner`, `FilesystemWatcher`, and `MediaIndex`
-    - `initialScan()`: call `scanner.scanDirectory(dir)` for each configured directory and populate the index
-    - `startWatching()`: start `FilesystemWatcher` on all configured directories
-    - `stopWatching()`: stop `FilesystemWatcher`
-    - _Requirements: 6.1, 6.2, 6.3, 6.4_
+- [ ] 7. MediaLibrary
+  - [ ] 7.1 Update `MediaLibrary` in `src/media/MediaLibrary.ts` to support `watchMode`
+    - Accept `config: ServerConfig` (or the relevant subset) in the constructor
+    - `startWatching()` dispatches on `config.watchMode`:
+      - `"fsevents"`: start `FilesystemWatcher` on all configured directories (existing behaviour)
+      - `"interval"`: start a `setInterval` that scans each directory **sequentially** (one `scanner.scanDirectory(dir)` at a time, awaited in order) to stagger disk I/O; period = `config.scanIntervalSeconds * 1000` ms; log scan start/complete with timestamp and item delta
+      - `"manual"`: no-op — do not start watcher or timer
+    - `stopWatching()`: stop the active watcher or clear the interval timer, whichever is running
+    - Add `async refresh(): Promise<void>` that runs a full sequential re-scan of all directories (same staggered approach as `"interval"` mode); used by `POST /library/refresh`
+    - _Requirements: 6.1, 6.2, 6.3, 6.4, 6.6, 6.7, 6.8_
 
   - [ ]* 7.2 Write property test for container hierarchy
     - **Property 4: Container Hierarchy Mirrors Filesystem Directory Structure**
@@ -110,6 +114,10 @@ Implement a DLNA/UPnP AV media server in Node.js 20 LTS with TypeScript 5.x that
   - [ ]* 7.3 Write property test for multiple root directories
     - **Property 10: Multiple Root Directories Become Top-Level Containers**
     - **Validates: Requirements 5.2**
+
+  - [ ]* 7.4 Write property test for watchMode activation behaviour
+    - **Property 18: watchMode Controls Whether Automatic Re-Scan Occurs**
+    - **Validates: Requirements 6.6, 6.7, 6.8**
 
 - [x] 8. Checkpoint — media layer
   - Ensure all tests in tasks 2–7 pass
@@ -247,6 +255,20 @@ Implement a DLNA/UPnP AV media server in Node.js 20 LTS with TypeScript 5.x that
   - [ ]* 12.2 Write unit tests for ConnectionManagerService
     - Test `GetProtocolInfo` returns all required MIME types in `SourceProtocolInfo`
     - _Requirements: 3.2, 3.3_
+
+- [ ] 12.5 Library refresh endpoint
+  - [ ] 12.5.1 Implement `POST /library/refresh` route in `src/http/LibraryRefreshHandler.ts`
+    - Register `POST /library/refresh` on the Fastify instance (protected by `AuthMiddleware`)
+    - Call `mediaLibrary.refresh()` and await completion
+    - Return HTTP 200 with JSON body `{ "itemCount": <number> }` on success
+    - Return HTTP 503 with `{ "error": "Scan already in progress" }` if a scan is already running (guard with a boolean flag)
+    - Log scan start, completion, and item count delta at INFO level
+    - _Requirements: 6.8_
+
+  - [ ]* 12.5.2 Write unit tests for LibraryRefreshHandler
+    - Test 200 response with correct `itemCount` after successful refresh
+    - Test 503 when a scan is already running
+    - _Requirements: 6.8_
 
 - [x] 13. DeviceDescription endpoints
   - [x] 13.1 Implement `DeviceDescription` in `src/http/DeviceDescription.ts`

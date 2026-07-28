@@ -34,6 +34,7 @@ import { registerDeviceDescription, loadOrCreateUdn } from './http/DeviceDescrip
 import { registerMediaStreamer } from './http/MediaStreamer.js';
 import { registerContentDirectoryService } from './services/ContentDirectoryService.js';
 import { registerConnectionManagerService } from './services/ConnectionManagerService.js';
+import { registerLibraryRefreshHandler } from './http/LibraryRefreshHandler.js';
 import { SSDPServer } from './ssdp/SSDPServer.js';
 import type { FastifyInstance } from 'fastify';
 
@@ -64,9 +65,9 @@ async function main(): Promise<void> {
   const baseUrl = `http://${host}:${config.port}`;
 
   // 6. Build media layer
-  const scanner = new MediaScanner(mediaIndex, logger, baseUrl);
+  const scanner = new MediaScanner(mediaIndex, logger, baseUrl, config.ffprobeConcurrency);
   const watcher = new FilesystemWatcher(scanner, mediaIndex, logger);
-  const library = new MediaLibrary(config.mediaDirectories, scanner, watcher, mediaIndex, logger);
+  const library = new MediaLibrary(config.mediaDirectories, scanner, watcher, mediaIndex, logger, config);
 
   // 7. Build Fastify HTTP server
   const fastify: FastifyInstance = createHttpServer();
@@ -80,6 +81,7 @@ async function main(): Promise<void> {
   registerMediaStreamer(fastify, mediaIndex, logger);
   registerContentDirectoryService(fastify, mediaIndex, logger, baseUrl);
   registerConnectionManagerService(fastify, logger);
+  registerLibraryRefreshHandler(fastify, library, mediaIndex, logger);
 
   // 9. Track active stream count for graceful drain
   let activeStreams = 0;

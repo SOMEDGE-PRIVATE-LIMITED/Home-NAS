@@ -9,6 +9,15 @@ export interface ServerConfig {
   mediaDirectories: string[];
   pin: string;
   logLevel: 'DEBUG' | 'INFO' | 'WARN' | 'ERROR';
+  /** Library refresh strategy. Default: "fsevents".
+   *  - "fsevents": native macOS FSEvents via chokidar (best for SSDs)
+   *  - "interval": full re-scan on a timer (recommended for slow HDDs)
+   *  - "manual":   no automatic refresh; use POST /library/refresh */
+  watchMode: 'fsevents' | 'interval' | 'manual';
+  /** Seconds between re-scans when watchMode="interval". Default: 300. */
+  scanIntervalSeconds: number;
+  /** Max parallel ffprobe calls during a scan. Lower = less disk I/O. Default: 4. */
+  ffprobeConcurrency: number;
 }
 
 // Defaults per design section 3.5
@@ -17,9 +26,13 @@ const DEFAULTS: Omit<ServerConfig, 'mediaDirectories'> = {
   port: 8200,
   pin: '',
   logLevel: 'INFO',
+  watchMode: 'fsevents',
+  scanIntervalSeconds: 300,
+  ffprobeConcurrency: 4,
 };
 
 const VALID_LOG_LEVELS: ReadonlyArray<string> = ['DEBUG', 'INFO', 'WARN', 'ERROR'];
+const VALID_WATCH_MODES: ReadonlyArray<string> = ['fsevents', 'interval', 'manual'];
 
 const DEFAULT_CONFIG_PATH = path.join(
   os.homedir(),
@@ -98,6 +111,35 @@ function validateAndApplyDefaults(raw: Record<string, unknown>): ServerConfig {
     }
   }
 
+  // --- Optional: watchMode (enum) ---
+  if (Object.prototype.hasOwnProperty.call(raw, 'watchMode')) {
+    if (typeof raw.watchMode !== 'string' || !VALID_WATCH_MODES.includes(raw.watchMode)) {
+      errors.push(
+        `"watchMode" must be one of ${VALID_WATCH_MODES.join(', ')} (got "${raw.watchMode}")`
+      );
+    }
+  }
+
+  // --- Optional: scanIntervalSeconds (integer >= 60) ---
+  if (Object.prototype.hasOwnProperty.call(raw, 'scanIntervalSeconds')) {
+    const v = raw.scanIntervalSeconds;
+    if (typeof v !== 'number' || !Number.isInteger(v)) {
+      errors.push('"scanIntervalSeconds" must be an integer');
+    } else if (v < 60) {
+      errors.push(`"scanIntervalSeconds" must be at least 60 (got ${v})`);
+    }
+  }
+
+  // --- Optional: ffprobeConcurrency (integer 1–16) ---
+  if (Object.prototype.hasOwnProperty.call(raw, 'ffprobeConcurrency')) {
+    const v = raw.ffprobeConcurrency;
+    if (typeof v !== 'number' || !Number.isInteger(v)) {
+      errors.push('"ffprobeConcurrency" must be an integer');
+    } else if (v < 1 || v > 16) {
+      errors.push(`"ffprobeConcurrency" must be between 1 and 16 (got ${v})`);
+    }
+  }
+
   if (errors.length > 0) {
     process.stderr.write(
       `[dlna-media-server] Config validation failed:\n` +
@@ -117,6 +159,17 @@ function validateAndApplyDefaults(raw: Record<string, unknown>): ServerConfig {
     logLevel: VALID_LOG_LEVELS.includes(raw.logLevel as string)
       ? (raw.logLevel as ServerConfig['logLevel'])
       : DEFAULTS.logLevel,
+    watchMode: VALID_WATCH_MODES.includes(raw.watchMode as string)
+      ? (raw.watchMode as ServerConfig['watchMode'])
+      : DEFAULTS.watchMode,
+    scanIntervalSeconds:
+      typeof raw.scanIntervalSeconds === 'number' && Number.isInteger(raw.scanIntervalSeconds) && raw.scanIntervalSeconds >= 60
+        ? raw.scanIntervalSeconds
+        : DEFAULTS.scanIntervalSeconds,
+    ffprobeConcurrency:
+      typeof raw.ffprobeConcurrency === 'number' && Number.isInteger(raw.ffprobeConcurrency) && raw.ffprobeConcurrency >= 1 && raw.ffprobeConcurrency <= 16
+        ? raw.ffprobeConcurrency
+        : DEFAULTS.ffprobeConcurrency,
   };
 
   return config;

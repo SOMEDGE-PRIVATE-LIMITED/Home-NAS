@@ -102,7 +102,7 @@ A DLNA media server application that runs on a Mac mini used as a home NAS (Netw
 
 ### Requirement 6: Media Library Scanning
 
-**User Story:** As a NAS administrator, I want the server to automatically detect new or changed media files, so that newly added content becomes available to the TV without restarting the server.
+**User Story:** As a NAS administrator, I want the server to detect new or changed media files without hammering the disk, so that newly added content becomes available to the TV while keeping disk I/O low on slow mechanical drives.
 
 #### Acceptance Criteria
 
@@ -111,6 +111,13 @@ A DLNA media server application that runs on a Mac mini used as a home NAS (Netw
 3. WHEN a file is removed from a monitored Media_Library directory, THE DLNA_Server SHALL detect the change and remove the corresponding Media_Item from the ContentDirectory index within 30 seconds.
 4. WHEN a file in a monitored Media_Library directory is modified, THE DLNA_Server SHALL update the corresponding Media_Item Metadata in the ContentDirectory index within 30 seconds.
 5. THE DLNA_Server SHALL index files with the following extensions: `.mp4`, `.mkv`, `.avi`, `.mov`, `.mp3`, `.flac`, `.aac`, `.m4a`, `.jpg`, `.jpeg`, `.png`.
+6. THE DLNA_Server SHALL support a configurable `watchMode` setting with the following values:
+   - `"fsevents"` (default): use native FSEvents via chokidar with no polling — efficient on SSDs and fast drives.
+   - `"interval"`: re-scan configured directories on a fixed polling interval, suitable for slow mechanical drives where continuous watching is too costly.
+   - `"manual"`: disable all automatic watching; the library is only refreshed on startup or when an explicit refresh is triggered.
+7. WHEN `watchMode` is `"interval"`, THE DLNA_Server SHALL re-scan the Media_Library at a configurable interval (default: 300 seconds), staggering directory scans to avoid simultaneous disk activity across multiple directories.
+8. WHEN an administrator sends an HTTP POST request to `/library/refresh`, THE DLNA_Server SHALL trigger an immediate full re-scan of all configured Media_Library directories, regardless of the configured `watchMode`.
+9. WHEN the initial scan is running, THE DLNA_Server SHALL process `ffprobe` metadata extraction with a configurable concurrency limit (default: 4) to avoid saturating disk I/O during startup on slow drives.
 
 ---
 

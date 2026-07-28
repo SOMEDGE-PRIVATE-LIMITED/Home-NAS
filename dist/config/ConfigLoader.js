@@ -33,8 +33,12 @@ const DEFAULTS = {
     port: 8200,
     pin: '',
     logLevel: 'INFO',
+    watchMode: 'fsevents',
+    scanIntervalSeconds: 300,
+    ffprobeConcurrency: 4,
 };
 const VALID_LOG_LEVELS = ['DEBUG', 'INFO', 'WARN', 'ERROR'];
+const VALID_WATCH_MODES = ['fsevents', 'interval', 'manual'];
 const DEFAULT_CONFIG_PATH = path.join(os.homedir(), '.config', 'dlna-media-server', 'config.json');
 /**
  * Resolves the config file path.
@@ -101,6 +105,32 @@ function validateAndApplyDefaults(raw) {
             errors.push(`"logLevel" must be one of ${VALID_LOG_LEVELS.join(', ')} (got "${raw.logLevel}")`);
         }
     }
+    // --- Optional: watchMode (enum) ---
+    if (Object.prototype.hasOwnProperty.call(raw, 'watchMode')) {
+        if (typeof raw.watchMode !== 'string' || !VALID_WATCH_MODES.includes(raw.watchMode)) {
+            errors.push(`"watchMode" must be one of ${VALID_WATCH_MODES.join(', ')} (got "${raw.watchMode}")`);
+        }
+    }
+    // --- Optional: scanIntervalSeconds (integer >= 60) ---
+    if (Object.prototype.hasOwnProperty.call(raw, 'scanIntervalSeconds')) {
+        const v = raw.scanIntervalSeconds;
+        if (typeof v !== 'number' || !Number.isInteger(v)) {
+            errors.push('"scanIntervalSeconds" must be an integer');
+        }
+        else if (v < 60) {
+            errors.push(`"scanIntervalSeconds" must be at least 60 (got ${v})`);
+        }
+    }
+    // --- Optional: ffprobeConcurrency (integer 1–16) ---
+    if (Object.prototype.hasOwnProperty.call(raw, 'ffprobeConcurrency')) {
+        const v = raw.ffprobeConcurrency;
+        if (typeof v !== 'number' || !Number.isInteger(v)) {
+            errors.push('"ffprobeConcurrency" must be an integer');
+        }
+        else if (v < 1 || v > 16) {
+            errors.push(`"ffprobeConcurrency" must be between 1 and 16 (got ${v})`);
+        }
+    }
     if (errors.length > 0) {
         process.stderr.write(`[dlna-media-server] Config validation failed:\n` +
             errors.map((e) => `  - ${e}`).join('\n') +
@@ -116,6 +146,15 @@ function validateAndApplyDefaults(raw) {
         logLevel: VALID_LOG_LEVELS.includes(raw.logLevel)
             ? raw.logLevel
             : DEFAULTS.logLevel,
+        watchMode: VALID_WATCH_MODES.includes(raw.watchMode)
+            ? raw.watchMode
+            : DEFAULTS.watchMode,
+        scanIntervalSeconds: typeof raw.scanIntervalSeconds === 'number' && Number.isInteger(raw.scanIntervalSeconds) && raw.scanIntervalSeconds >= 60
+            ? raw.scanIntervalSeconds
+            : DEFAULTS.scanIntervalSeconds,
+        ffprobeConcurrency: typeof raw.ffprobeConcurrency === 'number' && Number.isInteger(raw.ffprobeConcurrency) && raw.ffprobeConcurrency >= 1 && raw.ffprobeConcurrency <= 16
+            ? raw.ffprobeConcurrency
+            : DEFAULTS.ffprobeConcurrency,
     };
     return config;
 }
