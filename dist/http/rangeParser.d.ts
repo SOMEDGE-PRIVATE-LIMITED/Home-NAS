@@ -20,8 +20,7 @@ export interface ParsedRange {
  *
  * @param rangeHeader - The raw value of the `Range` header (may be undefined).
  * @param fileSize    - The total size of the file being served, in bytes.
- * @returns A `{ start, end }` object (both inclusive), or `null` if the header
- *          is absent or cannot be interpreted as a valid byte range.
+ * @returns A `{ start, end }` object (both inclusive), or `null`.
  */
 export declare function parseRangeHeader(rangeHeader: string | undefined, fileSize: number): ParsedRange | null;
 //# sourceMappingURL=rangeParser.d.ts.map

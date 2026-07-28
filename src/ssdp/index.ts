@@ -1,1 +1,2 @@
-// SSDP module — implemented in Task 16: SSDPServer
+export { SSDPServer } from './SSDPServer.js';
+export type { SSDPConfig } from './SSDPServer.js';

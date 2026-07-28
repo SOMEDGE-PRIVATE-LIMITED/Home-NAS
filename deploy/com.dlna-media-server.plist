@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  macOS LaunchDaemon property list for the DLNA Media Server.
+
+  Install:
+    sudo cp com.dlna-media-server.plist /Library/LaunchDaemons/
+    sudo launchctl load /Library/LaunchDaemons/com.dlna-media-server.plist
+
+  Uninstall:
+    sudo launchctl unload /Library/LaunchDaemons/com.dlna-media-server.plist
+    sudo rm /Library/LaunchDaemons/com.dlna-media-server.plist
+
+  Requirements: 9.1, 9.2, 9.3
+-->
+<plist version="1.0">
+<dict>
+  <!-- Service identity -->
+  <key>Label</key>
+  <string>com.dlna-media-server</string>
+
+  <!-- Run as the dedicated _dlna system user (created by install.sh) -->
+  <key>UserName</key>
+  <string>_dlna</string>
+
+  <!-- Executable and arguments -->
+  <key>ProgramArguments</key>
+  <array>
+    <string>/opt/dlna-media-server/bin/node</string>
+    <string>/opt/dlna-media-server/dist/index.js</string>
+  </array>
+
+  <!-- Environment variables -->
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>DLNA_CONFIG</key>
+    <string>/etc/dlna-media-server/config.json</string>
+    <key>NODE_ENV</key>
+    <string>production</string>
+  </dict>
+
+  <!-- Lifecycle -->
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+  <key>ThrottleInterval</key>
+  <integer>10</integer>
+
+  <!-- Process classification -->
+  <key>ProcessType</key>
+  <string>Background</string>
+
+  <!-- Log files — directory created by install.sh -->
+  <key>StandardOutPath</key>
+  <string>/var/log/dlna-media-server/stdout.log</string>
+  <key>StandardErrorPath</key>
+  <string>/var/log/dlna-media-server/stderr.log</string>
+
+  <!-- Working directory -->
+  <key>WorkingDirectory</key>
+  <string>/opt/dlna-media-server</string>
+</dict>
+</plist>

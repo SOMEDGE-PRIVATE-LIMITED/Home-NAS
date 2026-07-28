@@ -262,8 +262,8 @@ Implement a DLNA/UPnP AV media server in Node.js 20 LTS with TypeScript 5.x that
     - Test UDN is stable across multiple calls (generated once)
     - _Requirements: 1.4, 1.5_
 
-- [ ] 14. MediaStreamer
-  - [ ] 14.1 Implement range header parser in `src/http/rangeParser.ts`
+- [x] 14. MediaStreamer
+  - [x] 14.1 Implement range header parser in `src/http/rangeParser.ts`
     - Parse `Range: bytes=start-end`, `bytes=start-`, `bytes=-suffix` forms
     - Return `{ start: number, end: number }` or `null` if header absent
     - Clamp range values to actual file size
@@ -273,7 +273,7 @@ Implement a DLNA/UPnP AV media server in Node.js 20 LTS with TypeScript 5.x that
     - Test `bytes=0-499`, `bytes=500-`, `bytes=-100`, absent header, malformed values
     - _Requirements: 4.2_
 
-  - [~] 14.3 Implement `MediaStreamer` in `src/http/MediaStreamer.ts`
+  - [x] 14.3 Implement `MediaStreamer` in `src/http/MediaStreamer.ts`
     - Register `GET /stream/:itemId` and `HEAD /stream/:itemId` routes on Fastify instance
     - Look up `itemId` in `MediaIndex`; return HTTP 404 if not found; log warn with file path
     - For `HEAD` requests: return headers only with correct `Content-Length`
@@ -299,12 +299,12 @@ Implement a DLNA/UPnP AV media server in Node.js 20 LTS with TypeScript 5.x that
     - **Property 9: Byte-Range Requests Return HTTP 206 with Correct Range**
     - **Validates: Requirements 4.2**
 
-- [~] 15. Checkpoint — HTTP services
+- [x] 15. Checkpoint — HTTP services
   - Ensure all tests in tasks 9–14 pass
   - Ask the user if questions arise.
 
-- [ ] 16. SSDPServer
-  - [~] 16.1 Implement `SSDPServer` in `src/ssdp/SSDPServer.ts`
+- [x] 16. SSDPServer
+  - [x] 16.1 Implement `SSDPServer` in `src/ssdp/SSDPServer.ts`
     - Create UDP socket via `dgram.createSocket('udp4')` with `reuseAddr: true`; bind to port 1900; join multicast group `239.255.255.250` on all interfaces
     - Send five `ssdp:alive` NOTIFY messages at startup (one per USN variant: `upnp:rootdevice`, bare UUID, `MediaServer:1`, `ContentDirectory:1`, `ConnectionManager:1`)
     - Repeat `ssdp:alive` every 1800 seconds (`setInterval`)
@@ -323,8 +323,8 @@ Implement a DLNA/UPnP AV media server in Node.js 20 LTS with TypeScript 5.x that
     - **Property 1: SSDP M-SEARCH Response Contains Required Fields**
     - **Validates: Requirements 1.3, 7.2**
 
-- [ ] 17. Request logging middleware
-  - [~] 17.1 Implement HTTP request logging in `src/http/requestLogger.ts`
+- [x] 17. Request logging middleware
+  - [x] 17.1 Implement HTTP request logging in `src/http/requestLogger.ts`
     - Register a Fastify `onResponse` hook that logs `method`, `url`, `remoteAddress`, `statusCode`, `responseTime`
     - Register a Fastify `onSend` hook (or wrapper in ContentDirectory/ConnectionManager) that logs `soapAction`, `serviceType`, `responseStatus` for SOAP routes
     - _Requirements: 8.2, 8.3_
@@ -333,8 +333,8 @@ Implement a DLNA/UPnP AV media server in Node.js 20 LTS with TypeScript 5.x that
     - **Property 13: Log Entries Contain All Required Structured Fields**
     - **Validates: Requirements 8.1, 8.2, 8.3**
 
-- [ ] 18. Main entry point and graceful shutdown
-  - [~] 18.1 Create `src/index.ts` as the application entry point
+- [x] 18. Main entry point and graceful shutdown
+  - [x] 18.1 Create `src/index.ts` as the application entry point
     - Instantiate and wire all components: `ConfigLoader` → `pino logger` → `DeviceRegistry` → `MediaIndex` → `MediaLibrary` → `ContentDirectoryService` → `ConnectionManagerService` → `DeviceDescription` → `MediaStreamer` → `PINHandler` → `AuthMiddleware` → `SSDPServer`
     - Start HTTP server, then run `MediaLibrary.initialScan()`, then `MediaLibrary.startWatching()`, then `SSDPServer.start()`
     - Log startup completion with bound address and port
@@ -347,14 +347,14 @@ Implement a DLNA/UPnP AV media server in Node.js 20 LTS with TypeScript 5.x that
       6. `process.exit(0)`
     - _Requirements: 9.4, 4.4, 8.4_
 
-- [ ] 19. macOS launchd integration
-  - [~] 19.1 Create `deploy/com.dlna-media-server.plist` with the launchd configuration from design section 7.1
+- [x] 19. macOS launchd integration
+  - [x] 19.1 Create `deploy/com.dlna-media-server.plist` with the launchd configuration from design section 7.1
     - Include `RunAtLoad: true`, `KeepAlive: true`, `ThrottleInterval: 10`, `ProcessType: Background`, `UserName: _dlna`
     - Set `StandardOutPath` and `StandardErrorPath` to `/var/log/dlna-media-server/`
     - Set `DLNA_CONFIG` env var pointing to `/etc/dlna-media-server/config.json`
     - _Requirements: 9.1, 9.2, 9.3_
 
-  - [~] 19.2 Create `install.sh` installation script
+  - [x] 19.2 Create `install.sh` installation script
     - Create `_dlna` system user via `dscl`
     - Copy built application to `/opt/dlna-media-server/`
     - Create `/etc/dlna-media-server/config.json` with defaults if absent
@@ -391,7 +391,7 @@ Implement a DLNA/UPnP AV media server in Node.js 20 LTS with TypeScript 5.x that
     - Assert a unicast response arrives within 5 seconds containing `LOCATION`, `ST`, `USN`
     - _Requirements: 1.3_
 
-- [~] 21. Final checkpoint — full integration
+- [x] 21. Final checkpoint — full integration
   - Ensure all unit and integration tests pass (`npm test`)
   - Verify `npm run build` compiles without TypeScript errors
   - Ask the user if questions arise.
