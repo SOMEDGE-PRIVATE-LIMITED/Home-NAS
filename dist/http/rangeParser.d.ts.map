@@ -1,0 +1,1 @@
+{"version":3,"file":"rangeParser.d.ts","sourceRoot":"","sources":["../../src/http/rangeParser.ts"],"names":[],"mappings":"AAAA;;;;;;;;;;;;GAYG;AAEH,MAAM,WAAW,WAAW;IAC1B,KAAK,EAAE,MAAM,CAAC;IACd,GAAG,EAAE,MAAM,CAAC;CACb;AAED;;;;;;;GAOG;AACH,wBAAgB,gBAAgB,CAC9B,WAAW,EAAE,MAAM,GAAG,SAAS,EAC/B,QAAQ,EAAE,MAAM,GACf,WAAW,GAAG,IAAI,CA2DpB"}
